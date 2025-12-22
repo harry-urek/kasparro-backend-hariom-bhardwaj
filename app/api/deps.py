@@ -1,10 +1,10 @@
-"""API dependencies"""
-
-from typing import Generator
-from sqlalchemy.orm import Session
+from collections.abc import Generator
+from app.core.db import SessionLocal
 
 
 def get_db() -> Generator:
-    """Database dependency"""
-    # TODO: Implement database session
-    pass
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

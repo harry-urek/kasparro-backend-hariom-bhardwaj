@@ -1,49 +1,35 @@
-"""API response models"""
-
-from pydantic import BaseModel
-from typing import List, Optional, Any
 from datetime import datetime
+from pydantic import BaseModel
+
+
+class CryptoAssetOut(BaseModel):
+    asset_uid: str
+    symbol: str
+    name: str
+    price_usd: float | None
+    market_cap_usd: float | None
+    rank: int | None
+    source: str
+    source_updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class DataResponse(BaseModel):
-    """Response model for data endpoint"""
-
-    id: str
-    source: str
-    content: dict
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-
-class DataListResponse(BaseModel):
-    """Response model for data list"""
-
-    total: int
-    items: List[DataResponse]
-    limit: int
-    offset: int
-
-
-class StatsResponse(BaseModel):
-    """Response model for statistics"""
-
-    total_records: int
-    by_source: dict
-    last_updated: Optional[datetime] = None
+    request_id: str
+    api_latency_ms: int
+    data: list[CryptoAssetOut]
 
 
 class HealthResponse(BaseModel):
-    """Response model for health check"""
-
-    status: str
-    timestamp: datetime
-    details: Optional[dict] = None
+    database: str
+    last_etl_status: str | None
 
 
-class ETLStatusResponse(BaseModel):
-    """Response model for ETL status"""
-
-    success: bool
+class StatsResponse(BaseModel):
+    source_name: str
+    last_status: str
     records_processed: int
-    timestamp: datetime
-    errors: Optional[List[str]] = None
+    started_at: datetime
+    ended_at: datetime | None
