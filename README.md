@@ -1,1 +1,0 @@
-# kasparro-backend-hariom-bhardwaj
