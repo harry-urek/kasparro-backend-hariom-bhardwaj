@@ -1,6 +1,26 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: kasparro-db
+    environment:
+      - POSTGRES_DB=kasparro
+      - POSTGRES_USER=kasparro_user
+      - POSTGRES_PASSWORD=kasparro_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kasparro-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kasparro_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   api:
     build:
       context: .
@@ -8,11 +28,18 @@ services:
     container_name: kasparro-backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - ENV=development
       - LOG_LEVEL=info
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://kasparro_user:kasparro_pass@db:5432/kasparro}
+      - COINPAPRIKA_API_KEY=${COINPAPRIKA_API_KEY:-}
     volumes:
       - ./app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - kasparro-network
@@ -23,30 +50,9 @@ services:
       retries: 3
       start_period: 5s
 
-  # Placeholder for future database service
-  # db:
-  #   image: postgres:15-alpine
-  #   container_name: kasparro-db
-  #   environment:
-  #     POSTGRES_DB: kasparro
-  #     POSTGRES_USER: kasparro_user
-  #     POSTGRES_PASSWORD: kasparro_pass
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   networks:
-  #     - kasparro-network
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U kasparro_user"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
 networks:
   kasparro-network:
     driver: bridge
 
-# Uncomment when database is added
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_data:
