@@ -1,36 +1,84 @@
-"""Logging configuration"""
+"""Application logging with Loguru + Slack notifications."""
 
 import logging
 import sys
 from pathlib import Path
-from .config import settings
+from typing import Any
 
-# Create logs directory
-log_dir = Path("logs")
-log_dir.mkdir(exist_ok=True)
+import httpx
+from loguru import logger
 
-# Configure logging format
-log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-date_format = "%Y-%m-%d %H:%M:%S"
+from app.core.config import settings
 
-# Create formatter
-formatter = logging.Formatter(log_format, date_format)
-
-# Configure root logger
-logger = logging.getLogger("kasparro")
-logger.setLevel(logging.DEBUG if settings.debug else logging.INFO)
-
-# Console handler
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# File handler
-file_handler = logging.FileHandler(log_dir / "app.log")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[name]|app}:{function}:{line} | {message}"
 
 
-def get_logger(name: str) -> logging.Logger:
-    """Get logger for module"""
-    return logging.getLogger(f"kasparro.{name}")
+class InterceptHandler(logging.Handler):
+    """Redirect stdlib logs to Loguru."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_name == "emit":
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+def _slack_sink(message: Any) -> None:
+    if not settings.SLACK_WEBHOOK_URL:
+        return
+
+    record = message.record
+    name = record["extra"].get("name") or record.get("name", "app")
+    text = f"[{record['level'].name}] {name}:{record['function']}:{record['line']}\n{record['message']}"
+    try:
+        httpx.post(
+            settings.SLACK_WEBHOOK_URL,
+            json={"text": text},
+            timeout=5.0,
+        )
+    except Exception:
+        # Avoid recursive logging on Slack failures
+        pass
+
+
+def configure_logging() -> None:
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    logger.remove()
+    logger.add(
+        sys.stdout,
+        level=settings.LOG_LEVEL,
+        format=LOG_FORMAT,
+        backtrace=False,
+        diagnose=False,
+    )
+    logger.add(
+        log_dir / "app.log",
+        level=settings.LOG_LEVEL,
+        format=LOG_FORMAT,
+        rotation="10 MB",
+        retention="14 days",
+        enqueue=True,
+        backtrace=False,
+        diagnose=False,
+    )
+
+    if settings.SLACK_WEBHOOK_URL:
+        logger.add(_slack_sink, level="ERROR", enqueue=True)
+
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+
+def get_logger(name: str) -> logger.__class__:
+    return logger.bind(name=name)
+
+
+configure_logging()
