@@ -15,8 +15,8 @@ def health(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
         db_status = "ok"
-    except Exception:
-        db_status = "down"
+    except Exception as e:
+        db_status = f"down: {e}"
 
     # Last ETL run
     stmt = select(ETLRun).order_by(ETLRun.started_at.desc()).limit(1)
