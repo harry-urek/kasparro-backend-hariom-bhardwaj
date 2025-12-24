@@ -5,16 +5,18 @@ build:
   commands:
     build:
       - pip3 install --upgrade pip
-      - pip3 install -r requirements.txt
+      - pip3 install --target /app -r requirements.txt
 
 run:
-  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-  network:
-    port: 8000
+  command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
   env:
+    - name: PYTHONPATH
+      value: "/app"
     - name: ENV
       value: "prod"
     - name: ETL_ENABLED
       value: "false"
     - name: LOG_LEVEL
       value: "INFO"
+  network:
+    port: 8000
