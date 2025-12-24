@@ -78,6 +78,13 @@ async def scheduled_etl_task() -> None:
 async def lifespan(app: FastAPI):
     global _etl_task
 
+    # Log environment mode
+    log.info(f"Starting application in {settings.ENV.upper()} mode")
+    if settings.is_production:
+        log.info("Production mode: Debug disabled, docs disabled, stricter logging")
+    else:
+        log.info("Development mode: Debug enabled, docs available")
+
     # Startup
     try:
         run_migrations()
@@ -106,11 +113,18 @@ async def lifespan(app: FastAPI):
     log.info("Application shutdown complete")
 
 
+# Configure FastAPI based on environment
 app = FastAPI(
     title="Crypto ETL Backend",
     description="Production-grade ETL system for cryptocurrency market data",
     version="1.0.0",
     lifespan=lifespan,
+    # Disable docs in production for security
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
+    # Debug mode only in development
+    debug=settings.debug_enabled,
 )
 
 

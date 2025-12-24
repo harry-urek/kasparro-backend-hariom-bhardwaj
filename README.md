@@ -72,6 +72,7 @@ Makefile             # Quality-of-life commands
 ## Configuration
 Create a `.env` (already referenced via `pydantic-settings`):
 ```
+ENV=dev                    # "dev" or "prod" – controls docs/debug behavior
 DATABASE_URL=postgresql+psycopg2://kasparro_user:kasparro_pass@localhost:5432/kasparro
 LOG_LEVEL=INFO
 ETL_INTERVAL_SECONDS=300
@@ -81,6 +82,7 @@ SLACK_WEBHOOK_URL=<optional>
 CGEKO_KEY=<optional>
 ```
 Notes:
+- `ENV` controls environment mode: `dev` enables Swagger/Redoc docs and debug mode; `prod` disables docs for security.
 - `DATABASE_URL` is overridden automatically inside Docker to target the `db` service (`postgresql+psycopg2://kasparro_user:kasparro_pass@db:5432/kasparro`).
 - Set `ETL_ENABLED=false` to skip the scheduler (manual ETL only).
 - Provide `COINPAPRIKA_API_KEY` if your CoinPaprika plan requires authentication.
@@ -176,5 +178,16 @@ Swagger UI is available at `http://localhost:8000/docs` (Redoc at `/redoc`).
 - **ETL duplicates**: deduplication in `ETLService._normalize()` guarantees one `asset_uid` per insert; if you still see conflicts, clear checkpoints for the affected source.
 - **External API rate limits**: CoinPaprika can require an API key for sustained traffic; configure `COINPAPRIKA_API_KEY` when necessary.
 - **Background ETL stuck**: check `/stats` and container logs. You can disable the scheduler, run `/etl/run-all`, then re-enable once healthy.
+
+## AWS Deployment
+For production deployment on AWS App Runner (with Lambda-based ETL scheduling), see the full guide:
+
+📄 **[AWS Deployment Guide](docs/AWS_DEPLOYMENT.md)**
+
+Quick overview:
+- **App Runner** hosts the FastAPI container with `ENV=prod` (docs disabled, stricter logging)
+- **RDS PostgreSQL** provides managed database
+- **Lambda + EventBridge** triggers scheduled ETL (App Runner lacks cron)
+- Deployment scripts in `scripts/` automate ECR push and Lambda setup
 
 Happy building! Contributions, new sources, and observability improvements are welcome.

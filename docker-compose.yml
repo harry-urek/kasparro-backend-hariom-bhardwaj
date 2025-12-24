@@ -29,10 +29,12 @@ services:
     env_file:
       - .env
     environment:
-      - ENV=development
-      - LOG_LEVEL=info
-      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://kasparro_user:kasparro_pass@db:5432/kasparro}
+      - ENV=${ENV:-dev}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://kasparro_user:kasparro_pass@db:5432/kasparro}
       - COINPAPRIKA_API_KEY=${COINPAPRIKA_API_KEY:-}
+      - ETL_ENABLED=${ETL_ENABLED:-true}
+      - ETL_INTERVAL_SECONDS=${ETL_INTERVAL_SECONDS:-300}
     volumes:
       - ./app:/app/app
       - ./alembic.ini:/app/alembic.ini

@@ -1,0 +1,19 @@
+version: 1.0
+runtime: python3
+build:
+  commands:
+    build:
+      - pip install -r requirements.txt
+run:
+  runtime-version: 3.11
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+  network:
+    port: 8000
+    env: APP_PORT
+  env:
+    - name: ENV
+      value: "prod"
+    - name: ETL_ENABLED
+      value: "false"
+    - name: LOG_LEVEL
+      value: "INFO"

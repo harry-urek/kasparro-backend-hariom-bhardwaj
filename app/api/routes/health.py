@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, text
 
 from app.api.deps import get_db
+from app.core.config import settings
 from app.models.runs import ETLRun
 from app.schemas.api import HealthResponse
 from app.services.data_service import DataService
@@ -106,11 +107,14 @@ def detailed_health(db: Session = Depends(get_db)):
     return {
         "status": "healthy" if db_status == "ok" else "unhealthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "environment": settings.ENV,
         "database": {
             "status": db_status,
             "latency_ms": db_latency_ms,
         },
         "etl": {
+            "enabled": settings.ETL_ENABLED,
+            "interval_seconds": settings.ETL_INTERVAL_SECONDS,
             "total_runs": debug_info["etl_runs_count"],
             "latest_runs": latest_runs,
         },
@@ -119,5 +123,9 @@ def detailed_health(db: Session = Depends(get_db)):
             "raw_coingecko": debug_info["raw_coingecko_count"],
             "raw_coinpaprika": debug_info["raw_coinpaprika_count"],
             "raw_csv": debug_info["raw_csv_count"],
+        },
+        "config": {
+            "docs_enabled": settings.docs_enabled,
+            "debug_enabled": settings.debug_enabled,
         },
     }
