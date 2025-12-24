@@ -28,8 +28,59 @@ class HealthResponse(BaseModel):
 
 
 class StatsResponse(BaseModel):
+    run_id: str
     source_name: str
-    last_status: str
+    status: str
     records_processed: int
+    error_message: str | None = None
     started_at: datetime
     ended_at: datetime | None
+
+    class Config:
+        from_attributes = True
+
+
+class RawRecordOut(BaseModel):
+    id: str
+    payload: dict
+    source_updated_at: datetime
+    ingested_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RawDataResponse(BaseModel):
+    request_id: str
+    source: str
+    total_count: int
+    data: list[RawRecordOut]
+
+
+class ETLTriggerRequest(BaseModel):
+    source: str
+
+
+class ETLTriggerResponse(BaseModel):
+    success: bool
+    source: str
+    records_processed: int
+    error: str | None = None
+
+
+class CheckpointOut(BaseModel):
+    source_name: str
+    last_updated_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DebugResponse(BaseModel):
+    checkpoints: list[CheckpointOut]
+    etl_runs_count: int
+    normalized_count: int
+    raw_coingecko_count: int
+    raw_coinpaprika_count: int
+    raw_csv_count: int

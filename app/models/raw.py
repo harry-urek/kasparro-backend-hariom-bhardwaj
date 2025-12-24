@@ -1,7 +1,7 @@
 """Raw tables are source-specific, JSONB-based, and replay-safe."""
 
 import uuid
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +38,32 @@ class RawCoinGecko(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    source_updated_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    ingested_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
+class RawCSV(Base):
+    """Raw storage for CSV source data."""
+
+    __tablename__ = "raw_csv"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    filename: Mapped[str] = mapped_column(String, nullable=False)
 
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
 

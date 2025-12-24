@@ -37,6 +37,7 @@ services:
       - ./app:/app/app
       - ./alembic.ini:/app/alembic.ini
       - ./alembic:/app/alembic
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
