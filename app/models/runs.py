@@ -32,7 +32,8 @@ class ETLRun(Base):
 
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # "metadata" attribute name is reserved by SQLAlchemy; use column name metadata with safe attribute.
+    meta: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
 
     started_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),

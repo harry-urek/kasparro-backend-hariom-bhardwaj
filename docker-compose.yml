@@ -15,7 +15,7 @@ services:
     networks:
       - kasparro-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kasparro_user"]
+      test: ["CMD-SHELL", "pg_isready -U kasparro_user -d kasparro"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,6 +37,8 @@ services:
       - COINPAPRIKA_API_KEY=${COINPAPRIKA_API_KEY:-}
     volumes:
       - ./app:/app/app
+      - ./alembic.ini:/app/alembic.ini
+      - ./alembic:/app/alembic
     depends_on:
       db:
         condition: service_healthy

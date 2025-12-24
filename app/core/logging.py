@@ -10,7 +10,7 @@ from loguru import logger
 
 from app.core.config import settings
 
-LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[name]|app}:{function}:{line} | {message}"
+LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[name]}:{function}:{line} | {message}"
 
 
 class InterceptHandler(logging.Handler):
@@ -52,17 +52,27 @@ def configure_logging() -> None:
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
+    level = (settings.LOG_LEVEL or "INFO").strip().upper()
+    level = {
+        "WARN": "WARNING",
+        "FATAL": "CRITICAL",
+    }.get(level, level)
+    if level not in {"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"}:
+        level = "INFO"
+
     logger.remove()
+    # Provide a safe default for log formatting.
+    logger.configure(extra={"name": "app"})
     logger.add(
         sys.stdout,
-        level=settings.LOG_LEVEL,
+        level=level,
         format=LOG_FORMAT,
         backtrace=False,
         diagnose=False,
     )
     logger.add(
         log_dir / "app.log",
-        level=settings.LOG_LEVEL,
+        level=level,
         format=LOG_FORMAT,
         rotation="10 MB",
         retention="14 days",
