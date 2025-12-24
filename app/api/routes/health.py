@@ -18,11 +18,11 @@ router = APIRouter(prefix="/health", tags=["health"])
 def health(db: Session = Depends(get_db)):
     """
     Health check endpoint.
-    
+
     Checks:
     - Database connectivity
     - Last ETL run status
-    
+
     Use this for load balancer health checks and monitoring.
     """
     # DB connectivity
@@ -46,7 +46,7 @@ def health(db: Session = Depends(get_db)):
 def readiness(db: Session = Depends(get_db)):
     """
     Readiness probe - checks if the service is ready to serve traffic.
-    
+
     Returns 200 if ready, 503 if not.
     """
     try:
@@ -60,7 +60,7 @@ def readiness(db: Session = Depends(get_db)):
 def liveness():
     """
     Liveness probe - checks if the service is alive.
-    
+
     Always returns 200 if the service can respond.
     """
     return {"status": "alive", "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -70,7 +70,7 @@ def liveness():
 def detailed_health(db: Session = Depends(get_db)):
     """
     Detailed health check with comprehensive system information.
-    
+
     Use for debugging and monitoring dashboards.
     """
     service = DataService(db)
@@ -81,6 +81,7 @@ def detailed_health(db: Session = Depends(get_db)):
         db_status = "ok"
         db_latency_ms = None
         import time
+
         start = time.perf_counter()
         db.execute(text("SELECT 1"))
         db_latency_ms = int((time.perf_counter() - start) * 1000)

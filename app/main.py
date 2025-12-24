@@ -37,16 +37,14 @@ async def run_etl_pipeline() -> None:
     try:
         service = ETLService(db)
         results = await service.run_all()
-        
+
         # Log results for each source
         for source, result in results.items():
             if result.get("success"):
-                log.info(
-                    f"ETL {source}: processed {result.get('records_processed', 0)} records"
-                )
+                log.info(f"ETL {source}: processed {result.get('records_processed', 0)} records")
             else:
                 log.error(f"ETL {source}: failed - {result.get('error', 'unknown error')}")
-        
+
         log.info("ETL pipeline completed")
     except Exception as exc:
         log.exception(f"ETL pipeline failed: {exc}")
@@ -58,10 +56,10 @@ async def scheduled_etl_task() -> None:
     """Background task that runs ETL at configured interval."""
     interval = settings.ETL_INTERVAL_SECONDS
     log.info(f"Scheduled ETL task started (interval: {interval}s)")
-    
+
     # Run immediately on startup
     await run_etl_pipeline()
-    
+
     # Then run at configured interval
     while True:
         try:
@@ -79,23 +77,23 @@ async def scheduled_etl_task() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _etl_task
-    
+
     # Startup
     try:
         run_migrations()
     except Exception:
         log.exception("Failed to apply migrations on startup")
         raise
-    
+
     # Start the recurring ETL task if enabled
     if settings.ETL_ENABLED:
         log.info("Starting scheduled ETL background task...")
         _etl_task = asyncio.create_task(scheduled_etl_task())
     else:
         log.info("Scheduled ETL is disabled (ETL_ENABLED=false)")
-    
+
     yield
-    
+
     # Shutdown
     if _etl_task:
         log.info("Cancelling scheduled ETL task...")
@@ -104,7 +102,7 @@ async def lifespan(app: FastAPI):
             await _etl_task
         except asyncio.CancelledError:
             pass
-    
+
     log.info("Application shutdown complete")
 
 

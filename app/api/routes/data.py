@@ -34,7 +34,7 @@ def get_normalized_data(
 ):
     """
     Get normalized cryptocurrency data.
-    
+
     Returns unified schema across all sources with pagination and filtering.
     Includes request metadata (request_id, latency_ms).
     """
@@ -98,7 +98,7 @@ def get_raw_data(
 ):
     """
     Get raw data for a specific source.
-    
+
     Raw data is stored as-is from the source for auditability and replay.
     """
     request_id = str(uuid.uuid4())

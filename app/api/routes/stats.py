@@ -21,7 +21,7 @@ def get_etl_stats(
 ):
     """
     Get recent ETL run statistics.
-    
+
     Shows records processed, duration, status, and error messages.
     Use this for monitoring ETL health and debugging failures.
     """
@@ -46,7 +46,7 @@ def get_etl_stats(
 def get_checkpoints(db: Session = Depends(get_db)):
     """
     Get all ETL checkpoints.
-    
+
     Checkpoints track the last processed timestamp for each source,
     enabling incremental ingestion.
     """
@@ -67,7 +67,7 @@ def get_checkpoints(db: Session = Depends(get_db)):
 def get_sources_summary(db: Session = Depends(get_db)):
     """
     Get summary statistics for each data source.
-    
+
     Includes record counts, last checkpoint, and last run status.
     """
     service = DataService(db)
@@ -78,7 +78,7 @@ def get_sources_summary(db: Session = Depends(get_db)):
 def get_debug_info(db: Session = Depends(get_db)):
     """
     Get comprehensive debug information about system state.
-    
+
     Includes all checkpoints and record counts for debugging.
     """
     service = DataService(db)

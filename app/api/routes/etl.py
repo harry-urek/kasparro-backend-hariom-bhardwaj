@@ -21,14 +21,14 @@ async def trigger_etl(
 ):
     """
     Trigger ETL job for a specific source.
-    
+
     This runs the full ETL pipeline:
     1. Fetch data from source
     2. Store raw payloads
     3. Normalize and validate
     4. Upsert to normalized table
     5. Update checkpoint
-    
+
     Sources:
     - coingecko: CoinGecko API (no key required)
     - coinpaprika: CoinPaprika API (optional key)
@@ -59,7 +59,7 @@ async def trigger_etl(
 async def trigger_etl_all(db: Session = Depends(get_db)):
     """
     Trigger ETL for all configured sources.
-    
+
     Runs coingecko, coinpaprika, and csv (if file exists) sequentially.
     Returns results for each source.
     """
@@ -82,7 +82,7 @@ async def trigger_etl_background(
 ):
     """
     Trigger ETL job in background (non-blocking).
-    
+
     Returns immediately while ETL runs in background.
     Check /stats for job completion status.
     """

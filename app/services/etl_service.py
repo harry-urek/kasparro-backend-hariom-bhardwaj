@@ -30,7 +30,7 @@ DEFAULT_CSV_PATH = Path(__file__).parent.parent.parent / "data" / "crypto_market
 
 class ETLService:
     """Runs incremental, idempotent ETL for supported sources.
-    
+
     Responsibilities:
     - Orchestrate data ingestion from multiple sources
     - Store raw payloads for auditability/replay
@@ -96,7 +96,7 @@ class ETLService:
     async def run_all(self) -> Dict[str, Any]:
         """Run ETL for all configured sources."""
         sources: List[SourceName] = ["coingecko", "coinpaprika"]
-        
+
         # Only include CSV if file exists
         if self.csv_path.exists():
             sources.append("csv")
@@ -114,9 +114,7 @@ class ETLService:
     # -------------------------------------------------------------------------
     # Fetchers
     # -------------------------------------------------------------------------
-    async def _fetch_source(
-        self, source: SourceName, checkpoint: Optional[datetime]
-    ) -> List[Dict[str, Any]]:
+    async def _fetch_source(self, source: SourceName, checkpoint: Optional[datetime]) -> List[Dict[str, Any]]:
         """Fetch data from source with incremental filtering."""
         if source == "coingecko":
             runner = IngestionRunner([CoinGeckoSource()])
@@ -143,42 +141,46 @@ class ETLService:
             self._persist_raw_csv(records)
 
     def _persist_raw_coingecko(self, records: List[Dict[str, Any]]) -> None:
-        stmt = insert(RawCoinGecko).values([
-            {
-                "payload": rec["payload"],
-                "source_updated_at": rec["source_updated_at"],
-            }
-            for rec in records
-        ])
+        stmt = insert(RawCoinGecko).values(
+            [
+                {
+                    "payload": rec["payload"],
+                    "source_updated_at": rec["source_updated_at"],
+                }
+                for rec in records
+            ]
+        )
         self.db.execute(stmt)
 
     def _persist_raw_coinpaprika(self, records: List[Dict[str, Any]]) -> None:
-        stmt = insert(RawCoinPaprika).values([
-            {
-                "payload": rec["payload"],
-                "source_updated_at": rec["source_updated_at"],
-            }
-            for rec in records
-        ])
+        stmt = insert(RawCoinPaprika).values(
+            [
+                {
+                    "payload": rec["payload"],
+                    "source_updated_at": rec["source_updated_at"],
+                }
+                for rec in records
+            ]
+        )
         self.db.execute(stmt)
 
     def _persist_raw_csv(self, records: List[Dict[str, Any]]) -> None:
-        stmt = insert(RawCSV).values([
-            {
-                "filename": str(self.csv_path.name),
-                "payload": rec["payload"],
-                "source_updated_at": rec["source_updated_at"],
-            }
-            for rec in records
-        ])
+        stmt = insert(RawCSV).values(
+            [
+                {
+                    "filename": str(self.csv_path.name),
+                    "payload": rec["payload"],
+                    "source_updated_at": rec["source_updated_at"],
+                }
+                for rec in records
+            ]
+        )
         self.db.execute(stmt)
 
     # -------------------------------------------------------------------------
     # Normalization
     # -------------------------------------------------------------------------
-    def _normalize(
-        self, records: List[Dict[str, Any]], source: SourceName
-    ) -> List[Dict[str, Any]]:
+    def _normalize(self, records: List[Dict[str, Any]], source: SourceName) -> List[Dict[str, Any]]:
         """Normalize records into unified schema."""
         normalized: List[Dict[str, Any]] = []
         dedup: Dict[str, Dict[str, Any]] = {}
@@ -269,9 +271,7 @@ class ETLService:
     # -------------------------------------------------------------------------
     # Checkpoint Management
     # -------------------------------------------------------------------------
-    def _advance_checkpoint(
-        self, source: SourceName, records: List[Dict[str, Any]]
-    ) -> None:
+    def _advance_checkpoint(self, source: SourceName, records: List[Dict[str, Any]]) -> None:
         """Update checkpoint to newest record timestamp."""
         if not records:
             return

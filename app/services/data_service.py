@@ -149,9 +149,7 @@ class DataService:
         """Get debug information about system state."""
         return {
             "checkpoints": self.get_checkpoints(),
-            "etl_runs_count": self.db.execute(
-                select(func.count()).select_from(ETLRun)
-            ).scalar() or 0,
+            "etl_runs_count": self.db.execute(select(func.count()).select_from(ETLRun)).scalar() or 0,
             "normalized_count": self.get_normalized_count(),
             "raw_coingecko_count": self.get_raw_count("coingecko"),
             "raw_coinpaprika_count": self.get_raw_count("coinpaprika"),
@@ -169,13 +167,15 @@ class DataService:
             normalized_count = self.get_normalized_count(source)
             raw_count = self.get_raw_count(source)  # type: ignore[arg-type]
 
-            summary.append({
-                "source": source,
-                "normalized_records": normalized_count,
-                "raw_records": raw_count,
-                "last_checkpoint": checkpoint.last_updated_at if checkpoint else None,
-                "last_run_status": latest_run.status if latest_run else None,
-                "last_run_at": latest_run.started_at if latest_run else None,
-            })
+            summary.append(
+                {
+                    "source": source,
+                    "normalized_records": normalized_count,
+                    "raw_records": raw_count,
+                    "last_checkpoint": checkpoint.last_updated_at if checkpoint else None,
+                    "last_run_status": latest_run.status if latest_run else None,
+                    "last_run_at": latest_run.started_at if latest_run else None,
+                }
+            )
 
         return summary
