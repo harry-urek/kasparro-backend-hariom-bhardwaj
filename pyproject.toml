@@ -1,0 +1,19 @@
+[project]
+name = "kasparro-backend-hariom-bhardwaj"
+version = "0.1.0"
+description = "etl crypto backend"
+authors = [
+    {name = "Hari Om Bhardwaj",email = "hariombhardwaj038@gmail.com"}
+]
+readme = "README.md"
+requires-python = "3.11.1"
+dependencies = [
+    "alembic (>=1.17.2,<2.0.0)",
+    "fastapi[standard] (>=0.127.0,<0.128.0)",
+    "sqlalchemy (>=2.0.45,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
