@@ -10,7 +10,7 @@ run:
     - echo "Installing dependencies..."
     - pip3 install poetry
     - poetry config virtualenvs.create false
-    - poetry install
+    - poetry install --no-interaction --no-ansi --without dev --no-root
 
   command: poetry run uvicorn fastapi_neon.main:app --host 0.0.0.0 --port 8000
   network:
