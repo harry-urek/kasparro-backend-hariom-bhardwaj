@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     ETL_INTERVAL_SECONDS: int = 300  # 5 minutes default
     ETL_ENABLED: bool = True  # Enable/disable automatic ETL
 
+    # Docs Configuration
+    DOCS_ENABLED: bool | None = None  # Override docs setting (None = auto based on ENV)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",  # ignore unrelated keys in local .env
@@ -52,8 +55,11 @@ class Settings(BaseSettings):
 
     @property
     def docs_enabled(self) -> bool:
-        """Swagger/ReDoc docs enabled based on environment."""
-        # Docs available in dev, disabled in prod for security
+        """Swagger/ReDoc docs enabled based on environment or override."""
+        # If explicitly set via DOCS_ENABLED env var, use that
+        if self.DOCS_ENABLED is not None:
+            return self.DOCS_ENABLED
+        # Otherwise, docs available in dev, disabled in prod for security
         return self.is_development
 
 
