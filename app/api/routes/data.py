@@ -26,16 +26,26 @@ router = APIRouter(prefix="/data", tags=["data"])
 
 @router.get("", response_model=DataResponse)
 def get_normalized_data(
-    source: Optional[str] = Query(None, description="Filter by source (coingecko, coinpaprika, csv)"),
+    source: Optional[Literal["coingecko", "coinpaprika", "csv"]] = Query(None, description="Filter by source (coingecko, coinpaprika, csv)"),
     symbol: Optional[str] = Query(None, description="Filter by symbol (case-insensitive partial match)"),
-    limit: int = Query(50, ge=1, le=100, description="Number of records to return"),
+    name: Optional[str] = Query(None, description="Filter by name (case-insensitive partial match)"),
+    min_rank: Optional[int] = Query(None, ge=1, description="Filter assets with rank >= min_rank"),
+    max_rank: Optional[int] = Query(None, ge=1, description="Filter assets with rank <= max_rank"),
+    sort_by: Literal["rank", "price_usd", "market_cap_usd", "symbol", "name"] = Query("rank", description="Sort by field"),
+    sort_order: Literal["asc", "desc"] = Query("asc", description="Sort order"),
+    limit: int = Query(50, ge=1, le=500, description="Number of records to return (max 500)"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
     db: Session = Depends(get_db),
 ):
     """
-    Get normalized cryptocurrency data.
+    Get normalized cryptocurrency data with advanced filtering and sorting.
 
-    Returns unified schema across all sources with pagination and filtering.
+    Returns unified schema across all sources with:
+    - Pagination (limit/offset)
+    - Filtering by source, symbol, name, and rank range
+    - Sorting by rank, price, market cap, symbol, or name
+    - Cross-source IDs (coingecko_id, coinpaprika_id) for traceability
+
     Includes request metadata (request_id, latency_ms).
     """
     start = time.perf_counter()
@@ -45,6 +55,11 @@ def get_normalized_data(
     results = service.get_normalized_data(
         source=source,
         symbol=symbol,
+        name=name,
+        min_rank=min_rank,
+        max_rank=max_rank,
+        sort_by=sort_by,
+        sort_order=sort_order,
         limit=limit,
         offset=offset,
     )

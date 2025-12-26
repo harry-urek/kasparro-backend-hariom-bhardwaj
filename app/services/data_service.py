@@ -31,18 +31,44 @@ class DataService:
         self,
         source: Optional[str] = None,
         symbol: Optional[str] = None,
+        name: Optional[str] = None,
+        min_rank: Optional[int] = None,
+        max_rank: Optional[int] = None,
+        sort_by: str = "rank",
+        sort_order: str = "asc",
         limit: int = 100,
         offset: int = 0,
     ) -> List[NormalizedCryptoAsset]:
-        """Get normalized crypto assets with optional filtering."""
+        """Get normalized crypto assets with advanced filtering and sorting."""
         stmt = select(NormalizedCryptoAsset)
 
+        # Apply filters
         if source:
             stmt = stmt.where(NormalizedCryptoAsset.source == source)
         if symbol:
             stmt = stmt.where(NormalizedCryptoAsset.symbol.ilike(f"%{symbol}%"))
+        if name:
+            stmt = stmt.where(NormalizedCryptoAsset.name.ilike(f"%{name}%"))
+        if min_rank is not None:
+            stmt = stmt.where(NormalizedCryptoAsset.rank >= min_rank)
+        if max_rank is not None:
+            stmt = stmt.where(NormalizedCryptoAsset.rank <= max_rank)
 
-        stmt = stmt.order_by(NormalizedCryptoAsset.rank.asc().nullslast())
+        # Dynamic sorting
+        sort_column_map = {
+            "rank": NormalizedCryptoAsset.rank,
+            "price_usd": NormalizedCryptoAsset.price_usd,
+            "market_cap_usd": NormalizedCryptoAsset.market_cap_usd,
+            "symbol": NormalizedCryptoAsset.symbol,
+            "name": NormalizedCryptoAsset.name,
+        }
+        sort_column = sort_column_map.get(sort_by, NormalizedCryptoAsset.rank)
+
+        if sort_order == "desc":
+            stmt = stmt.order_by(sort_column.desc().nullslast())
+        else:
+            stmt = stmt.order_by(sort_column.asc().nullslast())
+
         stmt = stmt.limit(limit).offset(offset)
 
         return list(self.db.execute(stmt).scalars().all())

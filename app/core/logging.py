@@ -97,8 +97,14 @@ def configure_logging() -> None:
     # Intercept stdlib logging and disable propagation to avoid duplicates
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    # Disable uvicorn's default logging to prevent duplicates
-    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+    # Disable default logging for common libraries to prevent duplicates
+    for logger_name in [
+        "uvicorn",
+        "uvicorn.error",
+        "uvicorn.access",
+        "alembic",
+        "alembic.runtime.migration",
+    ]:
         logging.getLogger(logger_name).handlers = [InterceptHandler()]
         logging.getLogger(logger_name).propagate = False
 

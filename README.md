@@ -214,10 +214,11 @@ make health      # curl /health
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
-| `/health` | GET | Liveness probe leveraged by Docker health checks. |
-| `/data` | GET | Paginated normalized assets (filters: `source`, `symbol`). |
+| `/health` | GET | Health check for Docker/load balancer (checks DB + last ETL). |
+| `/health/ready` | GET | Kubernetes/ELB readiness probe. |
+| `/data` | GET | Paginated normalized assets with advanced filtering (`source`, `symbol`, `name`, `min_rank`, `max_rank`) and sorting (`sort_by`, `sort_order`). |
 | `/data/count` | GET | Total normalized rows (optionally per source). |
-| `/data/{asset_uid}` | GET | Single normalized record by UID (canonical identifier). |
+| `/data/{asset_uid}` | GET | Single normalized record by UID with cross-source IDs. |
 | `/data/raw/{source}` | GET | Recent raw payloads for a source with pagination. |
 | `/data/raw/{source}/{record_id}` | GET | Inspect a single raw JSON payload. |
 | `/etl/run/{source}` | POST | Synchronous ETL run for a specific source. |

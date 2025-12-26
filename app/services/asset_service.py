@@ -386,17 +386,31 @@ class AssetUnificationService:
         except Exception as exc:
             log.exception(f"Failed to generate CSV: {exc}")
 
-    async def _fetch_coincap(self) -> List[Dict[str, Any]]:
-        """Fetch top assets from CoinCap API (third source for CSV)."""
+    async def _fetch_coincap(self, retries: int = 3) -> List[Dict[str, Any]]:
+        """Fetch top assets from CoinCap API (third source for CSV).
+
+        Args:
+            retries: Number of retry attempts for network errors
+        """
         url = "https://api.coincap.io/v2/assets"
         params = {"limit": TOP_ASSETS_COUNT}
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            result = resp.json()
+        last_error = None
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.get(url, params=params)
+                    resp.raise_for_status()
+                    result = resp.json()
+                return result.get("data", [])
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                last_error = e
+                if attempt < retries - 1:
+                    wait_time = (attempt + 1) * 2  # 2, 4, 6 seconds
+                    log.warning(f"CoinCap API attempt {attempt + 1} failed, retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
 
-        return result.get("data", [])
+        raise last_error or Exception("Failed to fetch from CoinCap API")
 
     # =========================================================================
     # RESOLUTION - Called during ETL normalization

@@ -1,16 +1,21 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 
 class CryptoAssetOut(BaseModel):
+    """Normalized crypto asset with cross-source IDs for traceability."""
+
     asset_uid: str
     symbol: str
     name: str
-    price_usd: float | None
-    market_cap_usd: float | None
-    rank: int | None
+    price_usd: Optional[float] = None
+    market_cap_usd: Optional[float] = None
+    rank: Optional[int] = None
     source: str
     source_updated_at: datetime
+    coingecko_id: Optional[str] = None
+    coinpaprika_id: Optional[str] = None
 
     class Config:
         from_attributes = True

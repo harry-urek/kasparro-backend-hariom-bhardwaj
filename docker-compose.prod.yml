@@ -7,6 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: kasparro-backend
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "8000:8000"
     environment:
