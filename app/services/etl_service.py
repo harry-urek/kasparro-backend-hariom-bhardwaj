@@ -1,4 +1,9 @@
-"""End-to-end ETL service for all data sources (CoinGecko, CoinPaprika, CSV)."""
+"""End-to-end ETL service for all data sources (CoinGecko, CoinPaprika, CSV).
+
+This service implements proper cross-source normalization using deterministic
+entity matching. Data from CoinGecko, CoinPaprika, and CSV sources is unified
+into canonical entities using the AssetUnificationService.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -19,6 +25,7 @@ from app.models.checkpoints import ETLCheckpoint
 from app.models.normalized import NormalizedCryptoAsset
 from app.models.raw import RawCoinGecko, RawCoinPaprika, RawCSV
 from app.models.runs import ETLRun
+from app.services.asset_service import get_asset_service, AssetUnificationService
 
 log = get_logger("etl_service")
 
@@ -34,14 +41,30 @@ class ETLService:
     Responsibilities:
     - Orchestrate data ingestion from multiple sources
     - Store raw payloads for auditability/replay
-    - Normalize data into unified schema
+    - Normalize data into unified schema with cross-source entity matching
     - Track ETL runs and checkpoints
     - Handle failures gracefully
+    
+    Cross-Source Normalization:
+    - Uses AssetUnificationService for deterministic entity unification
+    - CoinGecko, CoinPaprika, and CSV data mapped to canonical asset_uid
+    - Source-specific IDs preserved for traceability
     """
 
-    def __init__(self, db: Session, csv_path: Optional[Path] = None):
+    def __init__(self, db: Session, csv_path: Optional[Path] = None, asset_service: Optional[AssetUnificationService] = None):
         self.db = db
         self.csv_path = csv_path or DEFAULT_CSV_PATH
+        self._asset_service = asset_service
+
+    @property
+    def asset_service(self) -> AssetUnificationService:
+        """Get the asset unification service."""
+        if self._asset_service is None:
+            # Try to get global instance
+            self._asset_service = get_asset_service()
+            if self._asset_service is None:
+                raise RuntimeError("AssetUnificationService not initialized. Call init_asset_service() first.")
+        return self._asset_service
 
     async def run(self, source: SourceName) -> Dict[str, Any]:
         """Run ETL for a single source."""
@@ -178,10 +201,24 @@ class ETLService:
         self.db.execute(stmt)
 
     # -------------------------------------------------------------------------
-    # Normalization
+    # Normalization with Cross-Source Entity Matching
     # -------------------------------------------------------------------------
     def _normalize(self, records: List[Dict[str, Any]], source: SourceName) -> List[Dict[str, Any]]:
-        """Normalize records into unified schema."""
+        """Normalize records into unified schema with deterministic cross-source matching.
+        
+        Uses AssetResolver to unify CoinGecko, CoinPaprika, and CSV data into
+        canonical entities. Each source's unique identifier is used for matching:
+        - CoinGecko: payload['id'] (e.g., 'bitcoin')
+        - CoinPaprika: payload['id'] (e.g., 'btc-bitcoin')
+        - CSV: Symbol + Name matching
+        
+        Args:
+            records: Raw records from a source
+            source: Source name for context
+            
+        Returns:
+            List of normalized records with canonical asset_uid
+        """
         normalized: List[Dict[str, Any]] = []
         dedup: Dict[str, Dict[str, Any]] = {}
 
@@ -191,17 +228,27 @@ class ETLService:
                 log.warning(f"Skipping record without symbol: {rec.get('payload', {})}")
                 continue
 
-            # Create stable asset_uid from symbol
-            asset_uid = symbol.lower()
+            name = rec.get("name") or symbol
+            payload = rec.get("payload", {})
+
+            # Use AssetUnificationService for deterministic cross-source matching
+            asset_uid, coingecko_id, coinpaprika_id = self.asset_service.resolve(
+                source=source,
+                symbol=symbol,
+                name=name,
+                payload=payload,
+            )
 
             normalized_payload = {
                 "asset_uid": asset_uid,
                 "symbol": symbol,
-                "name": rec.get("name") or symbol,
+                "name": name,
                 "price_usd": self._safe_float(rec.get("price_usd")),
                 "market_cap_usd": self._safe_float(rec.get("market_cap_usd")),
                 "rank": self._safe_int(rec.get("rank")),
                 "source": source,
+                "coingecko_id": coingecko_id,
+                "coinpaprika_id": coinpaprika_id,
                 "source_updated_at": rec.get("source_updated_at"),
             }
 
@@ -248,7 +295,12 @@ class ETLService:
     # Normalized Data Upsert
     # -------------------------------------------------------------------------
     def _upsert_normalized(self, rows: List[Dict[str, Any]]) -> None:
-        """Upsert normalized records (idempotent write)."""
+        """Upsert normalized records (idempotent write).
+        
+        Uses on_conflict_do_update to handle cross-source data merging.
+        Source-specific IDs are preserved using COALESCE to avoid overwriting
+        existing IDs with NULL from sources that don't provide them.
+        """
         if not rows:
             return
 
@@ -262,6 +314,9 @@ class ETLService:
                 "market_cap_usd": stmt.excluded.market_cap_usd,
                 "rank": stmt.excluded.rank,
                 "source": stmt.excluded.source,
+                # Preserve existing source IDs, update only if new value is not NULL
+                "coingecko_id": func.coalesce(stmt.excluded.coingecko_id, NormalizedCryptoAsset.coingecko_id),
+                "coinpaprika_id": func.coalesce(stmt.excluded.coinpaprika_id, NormalizedCryptoAsset.coinpaprika_id),
                 "source_updated_at": stmt.excluded.source_updated_at,
                 "ingested_at": datetime.now(timezone.utc),
             },

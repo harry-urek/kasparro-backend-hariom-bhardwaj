@@ -12,7 +12,7 @@ run:
     - poetry config virtualenvs.create false
     - poetry install --no-interaction --no-ansi --without dev --no-root
 
-  command: poetry run uvicorn fastapi_neon.main:app --host 0.0.0.0 --port 8000
+  command: poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
   network:
     port: 8000
   env:

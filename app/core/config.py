@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str | None = None
 
     # ETL Configuration
-    ETL_INTERVAL_SECONDS: int = 300  # 5 minutes default
+    ETL_INTERVAL_SECONDS: int = 22 * 60  # 22 minutes - runs after CSV update (20 mins)
     ETL_ENABLED: bool = True  # Enable/disable automatic ETL
+    
+    # CSV Generation from CoinCap API
+    CSV_UPDATE_INTERVAL_SECONDS: int = 20 * 60  # 20 minutes
 
     # Docs Configuration
     DOCS_ENABLED: bool | None = None  # Override docs setting (None = auto based on ENV)

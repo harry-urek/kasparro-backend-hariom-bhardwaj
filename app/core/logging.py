@@ -12,6 +12,9 @@ from app.core.config import settings
 
 LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {extra[name]}:{function}:{line} | {message}"
 
+# Track if logging is already configured to prevent duplicates
+_logging_configured = False
+
 
 class InterceptHandler(logging.Handler):
     """Redirect stdlib logs to Loguru."""
@@ -49,6 +52,13 @@ def _slack_sink(message: Any) -> None:
 
 
 def configure_logging() -> None:
+    global _logging_configured
+    
+    # Prevent duplicate configuration
+    if _logging_configured:
+        return
+    _logging_configured = True
+    
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
@@ -84,7 +94,13 @@ def configure_logging() -> None:
     if settings.SLACK_WEBHOOK_URL:
         logger.add(_slack_sink, level="ERROR", enqueue=True)
 
+    # Intercept stdlib logging and disable propagation to avoid duplicates
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    
+    # Disable uvicorn's default logging to prevent duplicates
+    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+        logging.getLogger(logger_name).handlers = [InterceptHandler()]
+        logging.getLogger(logger_name).propagate = False
 
 
 def get_logger(name: str) -> logger.__class__:

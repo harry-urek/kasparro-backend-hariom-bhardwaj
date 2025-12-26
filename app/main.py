@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.logging import get_logger
 from app.services.etl_service import ETLService
+from app.services.asset_service import init_asset_service, shutdown_asset_service, get_asset_service
 
 
 log = get_logger("app")
@@ -35,7 +36,9 @@ async def run_etl_pipeline() -> None:
     log.info("Starting ETL pipeline for all sources...")
     db = SessionLocal()
     try:
-        service = ETLService(db)
+        # Get the global asset service for normalization
+        asset_service = get_asset_service()
+        service = ETLService(db, asset_service=asset_service)
         results = await service.run_all()
 
         # Log results for each source
@@ -92,7 +95,19 @@ async def lifespan(app: FastAPI):
         log.exception("Failed to apply migrations on startup")
         raise
 
-    # Start the recurring ETL task if enabled
+    # Initialize Asset Unification Service (performs bootstrap + starts CSV updater)
+    log.info("Initializing Asset Unification Service...")
+    db = SessionLocal()
+    try:
+        await init_asset_service(db)
+        log.info("Asset Unification Service initialized successfully")
+        log.info("  - Asset mappings bootstrapped from CoinGecko & CoinPaprika")
+        log.info("  - CSV updater started (generates from CoinCap every 20 mins)")
+    except Exception as exc:
+        log.warning(f"Asset service initialization failed (will use fallback): {exc}")
+    # Note: Don't close db - the service keeps it for resolution queries
+
+    # Start the recurring ETL task if enabled (runs every 22 minutes)
     if settings.ETL_ENABLED:
         log.info("Starting scheduled ETL background task...")
         _etl_task = asyncio.create_task(scheduled_etl_task())
@@ -102,6 +117,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    log.info("Shutting down services...")
+    
+    # Stop ETL task
     if _etl_task:
         log.info("Cancelling scheduled ETL task...")
         _etl_task.cancel()
@@ -109,6 +127,12 @@ async def lifespan(app: FastAPI):
             await _etl_task
         except asyncio.CancelledError:
             pass
+
+    # Shutdown asset service (stops CSV updater)
+    shutdown_asset_service()
+    
+    # Close the database session
+    db.close()
 
     log.info("Application shutdown complete")
 

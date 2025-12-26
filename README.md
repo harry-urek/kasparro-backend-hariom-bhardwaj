@@ -1,9 +1,10 @@
 # Kasparro Crypto ETL Backend
 
-Production-grade FastAPI backend that ingests cryptocurrency market data from CoinGecko, CoinPaprika, and a local CSV feed. The service normalizes heterogeneous payloads into a unified schema, exposes operational APIs, and keeps Postgres in sync via Alembic migrations.
+Production-grade FastAPI backend that ingests cryptocurrency market data from CoinGecko, CoinPaprika, and CoinCap (via CSV). The service implements **cross-source entity unification** to normalize heterogeneous payloads into a unified schema, exposes operational APIs, and keeps Postgres in sync via Alembic migrations.
 
 ## Table of Contents
 - [Architecture](#architecture)
+- [Cross-Source Asset Unification](#cross-source-asset-unification)
 - [Tech Stack & Tooling](#tech-stack--tooling)
 - [Repository Layout](#repository-layout)
 - [Configuration](#configuration)
@@ -37,10 +38,56 @@ Production-grade FastAPI backend that ingests cryptocurrency market data from Co
                           │  (app/main) │        │ / Automation / Webhooks │
                           └─────────────┘        └─────────────────────────┘
 ```
+
+## Cross-Source Asset Unification
+
+The system implements **deterministic cross-source entity matching** to unify cryptocurrency data from multiple sources into canonical entities.
+
+### Data Flow
+```
+STARTUP (Bootstrap):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. Fetch top 100 from CoinGecko API ─┐                                  │
+│                                      ├──> Match by symbol & rank        │
+│ 2. Fetch top 100 from CoinPaprika API┘         │                        │
+│                                                ▼                        │
+│                                    100 unified asset mappings           │
+│                                    (asset_uid ↔ coingecko_id ↔          │
+│                                     coinpaprika_id ↔ symbol)            │
+│                                                                         │
+│ 3. Generate initial CSV from CoinCap API → data/crypto_market.csv       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+EVERY 20 MINUTES (CSV Update):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CoinCap API ──> Regenerate data/crypto_market.csv with latest prices   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+EVERY 22 MINUTES (ETL Pipeline):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1. Ingest from CoinGecko API                                           │
+│ 2. Ingest from CoinPaprika API                                         │
+│ 3. Ingest from CSV (CoinCap data)                                      │
+│                    ↓                                                    │
+│ 4. Normalize all data using AssetUnificationService                    │
+│    • Resolve each record to canonical asset_uid                        │
+│    • Preserve source-specific IDs (coingecko_id, coinpaprika_id)       │
+│                    ↓                                                    │
+│ 5. Upsert to unified data store (normalized_crypto_assets)             │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Asset Matching Strategy
+| Priority | Strategy | Example |
+|----------|----------|---------|
+| 1 | Source-specific ID lookup | `coingecko_id: "bitcoin"` → `asset_uid: "bitcoin"` |
+| 2 | Symbol + Name matching | `BTC` + `Bitcoin` → `asset_uid: "bitcoin"` |
+| 3 | Generate canonical ID | New asset → `asset_uid` from CoinGecko ID or normalized name |
+
 Key flows:
-1. `CoinGeckoSource`, `CoinPaprikaSource`, and `CSVSource` fetch raw payloads through `httpx` or filesystem.
-2. `ETLService` ([app/services/etl_service.py](app/services/etl_service.py)) persists raw data, normalizes to a canonical shape, deduplicates by `asset_uid`, upserts into `NormalizedCryptoAsset`, and advances checkpoints.
-3. A lifespan task ([app/main.py](app/main.py)) applies Alembic migrations at startup and schedules the recurring ETL loop (default every 5 minutes).
+1. **Bootstrap at startup**: `AssetUnificationService` fetches top 100 assets from CoinGecko and CoinPaprika, matches by symbol/rank, creates unified mappings.
+2. **CSV generation**: Every 20 minutes, CoinCap API data is fetched and written to `data/crypto_market.csv`.
+3. **ETL pipeline**: Every 22 minutes, data from all 3 sources is ingested, normalized using the asset mappings, and upserted to `NormalizedCryptoAsset`.
 4. Observability endpoints under `/stats` expose run history, checkpoints, and debug summaries; `/data` serves normalized/raw records to downstream consumers.
 
 ## Tech Stack & Tooling
@@ -63,11 +110,12 @@ app/
   api/               # Router modules for /data, /etl, /stats, /health
   core/              # Config, logging, DB session helpers
   ingestion/         # Source adapters + runner abstraction
-  models/            # SQLAlchemy models (raw, normalized, runs, checkpoints)
+  models/            # SQLAlchemy models (raw, normalized, runs, checkpoints, asset_mapping)
   schemas/           # Pydantic response contracts
-  services/          # ETL + query services
+  services/          # Asset unification service, ETL service, data service
   tests/             # API + ETL unit/integration tests
 alembic/             # Migration environment & versions
+data/                # Auto-generated CSV from CoinCap API
 Dockerfile           # Multi-stage production image definition
 docker-compose.yml   # Development: API + local Postgres orchestration
 docker-compose.prod.yml  # Production: API only (uses external RDS)
@@ -81,8 +129,9 @@ Create a `.env` (already referenced via `pydantic-settings`):
 ENV=dev                    # "dev" or "prod" – controls docs/debug behavior
 DATABASE_URL=postgresql+psycopg2://kasparro_user:kasparro_pass@localhost:5432/kasparro
 LOG_LEVEL=INFO
-ETL_INTERVAL_SECONDS=300
+ETL_INTERVAL_SECONDS=1320  # 22 minutes (runs after CSV update)
 ETL_ENABLED=true
+CSV_UPDATE_INTERVAL_SECONDS=1200  # 20 minutes (CoinCap CSV generation)
 DOCS_ENABLED=                # Optional: Override docs (true/false), defaults to auto (dev=true, prod=false)
 COINPAPRIKA_API_KEY=<optional>
 SLACK_WEBHOOK_URL=<optional>
@@ -92,6 +141,8 @@ Notes:
 - `ENV` controls environment mode: `dev` enables Swagger/Redoc docs and debug mode; `prod` disables docs for security.
 - `DOCS_ENABLED` overrides the automatic docs behavior – set to `true` to enable docs in production if needed.
 - `DATABASE_URL` is overridden automatically inside Docker to target the `db` service (`postgresql+psycopg2://kasparro_user:kasparro_pass@db:5432/kasparro`).
+- `ETL_INTERVAL_SECONDS` defaults to 22 minutes (1320s) to run after CSV updates complete.
+- `CSV_UPDATE_INTERVAL_SECONDS` defaults to 20 minutes (1200s) for CoinCap CSV generation.
 - Set `ETL_ENABLED=false` to skip the scheduler (manual ETL only).
 - Provide `COINPAPRIKA_API_KEY` if your CoinPaprika plan requires authentication.
 - `SLACK_WEBHOOK_URL` enables Loguru notifications for critical errors.
@@ -145,21 +196,28 @@ make health      # curl /health
 - Migration config lives in `alembic.ini` and `alembic/env.py` with the same models metadata used by the app.
 
 ## ETL Operations
-- **Sources**: CoinGecko (top 100 market-cap assets), CoinPaprika (full ticker set), and `data/crypto_market.csv` (ingested only if the file exists).
+- **Sources**: CoinGecko (top 100 market-cap assets), CoinPaprika (full ticker set), and `data/crypto_market.csv` (auto-generated from CoinCap API every 20 minutes).
+- **Cross-source unification**: `AssetUnificationService` matches assets by symbol and market cap rank, creating canonical `asset_uid` mappings at startup.
 - **Incremental strategy**: each record carries `source_updated_at`; checkpoints (table `etl_checkpoints`) ensure we only ingest new data.
 - **Raw storage**: payloads are saved as JSON in `raw_coingecko`, `raw_coinpaprika`, and `raw_csv` for auditability and replay.
-- **Normalization**: assets collapse to a canonical shape (UID = lowercase symbol) with safe casting and deduplication to prevent multi-write conflicts.
+- **Normalization**: assets are resolved to canonical `asset_uid` using the `AssetUnificationService`, with source-specific IDs (`coingecko_id`, `coinpaprika_id`) preserved for traceability.
 - **Runs tracking**: `etl_runs` captures run status, counts, and errors for observability.
-- **Scheduling**: `scheduled_etl_task()` starts immediately then sleeps for `ETL_INTERVAL_SECONDS`. Disable by setting `ETL_ENABLED=false` or stop the background task by shutting down the API.
+- **Scheduling**: 
+  - CSV generation from CoinCap runs every 20 minutes
+  - ETL pipeline runs every 22 minutes (after CSV is refreshed)
+  - Disable by setting `ETL_ENABLED=false` or stop the background task by shutting down the API.
 - **Manual triggers**: use `/etl/run/{source}`, `/etl/run-all`, or `/etl/run-background/{source}` endpoints for ad-hoc jobs.
 
 ## API Reference
+
+**Base URL**: `http://localhost:8000`
+
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/health` | GET | Liveness probe leveraged by Docker health checks. |
 | `/data` | GET | Paginated normalized assets (filters: `source`, `symbol`). |
 | `/data/count` | GET | Total normalized rows (optionally per source). |
-| `/data/{asset_uid}` | GET | Single normalized record by UID (lowercase symbol). |
+| `/data/{asset_uid}` | GET | Single normalized record by UID (canonical identifier). |
 | `/data/raw/{source}` | GET | Recent raw payloads for a source with pagination. |
 | `/data/raw/{source}/{record_id}` | GET | Inspect a single raw JSON payload. |
 | `/etl/run/{source}` | POST | Synchronous ETL run for a specific source. |
@@ -169,6 +227,34 @@ make health      # curl /health
 | `/stats/checkpoints` | GET | Current incremental checkpoints per source. |
 | `/stats/sources` | GET | Summary of normalized/raw counts + last run metadata. |
 | `/stats/debug` | GET | Aggregated debug payload (counts + checkpoints). |
+
+### Example Requests
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Get all normalized assets (paginated)
+curl "http://localhost:8000/data?limit=10&offset=0"
+
+# Get assets from a specific source
+curl "http://localhost:8000/data?source=coingecko&limit=10"
+
+# Get a specific asset by canonical ID
+curl http://localhost:8000/data/bitcoin
+
+# Get raw CoinGecko payloads
+curl "http://localhost:8000/data/raw/coingecko?limit=5"
+
+# Trigger ETL for all sources
+curl -X POST http://localhost:8000/etl/run-all
+
+# Get ETL run statistics
+curl http://localhost:8000/stats
+
+# Get current checkpoints
+curl http://localhost:8000/stats/checkpoints
+```
 
 Swagger UI is available at `http://localhost:8000/docs` (Redoc at `/redoc`).
 
@@ -299,10 +385,10 @@ curl http://localhost:8000/health
 ### Step 4: Access the Application
 
 Once deployed, the API is accessible at:
-- **API Base URL**: `http://kasparro-be.harry-dev.tech`
-- **Swagger Docs**: `http://kasparro-be.harry-dev.tech/docs` (if `DOCS_ENABLED=true`)
-- **ReDoc**: `http://kasparro-be.harry-dev.tech/redoc` (if `DOCS_ENABLED=true`)
-- **Health Check**: `http://kasparro-be.harry-dev.tech/health`
+- **API Base URL**: `http://kasparro-be.harry-dev.tech:8000`
+- **Swagger Docs**: `http://kasparro-be.harry-dev.tech:8000/docs` (if `DOCS_ENABLED=true`)
+- **ReDoc**: `http://kasparro-be.harry-dev.tech:8000/redoc` (if `DOCS_ENABLED=true`)
+- **Health Check**: `http://kasparro-be.harry-dev.tech:8000/health`
 
 > **Note**: Replace with your own domain or use `http://<ELASTIC_IP>:8000` if not using a custom domain.
 
@@ -390,7 +476,8 @@ docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
 | `LOG_LEVEL` | No | `info` | Logging level |
 | `DOCS_ENABLED` | No | `true` | Enable Swagger/ReDoc |
 | `ETL_ENABLED` | No | `true` | Enable background ETL |
-| `ETL_INTERVAL_SECONDS` | No | `300` | ETL run interval |
+| `ETL_INTERVAL_SECONDS` | No | `1320` | ETL run interval (22 mins) |
+| `CSV_UPDATE_INTERVAL_SECONDS` | No | `1200` | CSV generation interval (20 mins) |
 | `COINPAPRIKA_API_KEY` | No | - | API key for CoinPaprika |
 
 ### Production Management Commands
