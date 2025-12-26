@@ -15,6 +15,11 @@ Production-grade FastAPI backend that ingests cryptocurrency market data from Co
 - [API Reference](#api-reference)
 - [Testing & Quality](#testing--quality)
 - [Troubleshooting](#troubleshooting)
+- [AWS Deployment](#aws-deployment)
+- [EC2 Production Deployment](#ec2-production-deployment)
+- [Docker Configuration](#docker-configuration)
+  - [Multi-Stage Dockerfile](#multi-stage-dockerfile)
+  - [Development vs Production Docker Compose](#development-vs-production-docker-compose)
 
 ## Architecture
 ```
@@ -63,8 +68,9 @@ app/
   services/          # ETL + query services
   tests/             # API + ETL unit/integration tests
 alembic/             # Migration environment & versions
-Dockerfile           # Production image definition
-docker-compose.yml   # API + Postgres orchestration
+Dockerfile           # Multi-stage production image definition
+docker-compose.yml   # Development: API + local Postgres orchestration
+docker-compose.prod.yml  # Production: API only (uses external RDS)
 requirements.txt     # Locked Python dependencies
 Makefile             # Quality-of-life commands
 ```
@@ -77,12 +83,14 @@ DATABASE_URL=postgresql+psycopg2://kasparro_user:kasparro_pass@localhost:5432/ka
 LOG_LEVEL=INFO
 ETL_INTERVAL_SECONDS=300
 ETL_ENABLED=true
+DOCS_ENABLED=                # Optional: Override docs (true/false), defaults to auto (dev=true, prod=false)
 COINPAPRIKA_API_KEY=<optional>
 SLACK_WEBHOOK_URL=<optional>
 CGEKO_KEY=<optional>
 ```
 Notes:
 - `ENV` controls environment mode: `dev` enables Swagger/Redoc docs and debug mode; `prod` disables docs for security.
+- `DOCS_ENABLED` overrides the automatic docs behavior – set to `true` to enable docs in production if needed.
 - `DATABASE_URL` is overridden automatically inside Docker to target the `db` service (`postgresql+psycopg2://kasparro_user:kasparro_pass@db:5432/kasparro`).
 - Set `ETL_ENABLED=false` to skip the scheduler (manual ETL only).
 - Provide `COINPAPRIKA_API_KEY` if your CoinPaprika plan requires authentication.
@@ -189,5 +197,227 @@ Quick overview:
 - **RDS PostgreSQL** provides managed database
 - **Lambda + EventBridge** triggers scheduled ETL (App Runner lacks cron)
 - Deployment scripts in `scripts/` automate ECR push and Lambda setup
+
+---
+
+## EC2 Production Deployment
+
+🌐 **Live Production URL**: [http://kasparro-be.harry-dev.tech](http://kasparro-be.harry-dev.tech)
+
+This section covers deploying the application to an **AWS EC2 instance** with a **public Elastic IP address** using Docker Compose.
+
+### Architecture Overview
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         AWS Cloud                                │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                     EC2 Instance                          │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │              Docker Engine                          │  │  │
+│  │  │  ┌───────────────────────────────────────────────┐  │  │  │
+│  │  │  │         kasparro-backend container            │  │  │  │
+│  │  │  │  • FastAPI + Uvicorn                          │  │  │  │
+│  │  │  │  • Background ETL scheduler                   │  │  │  │
+│  │  │  │  • Port 8000                                  │  │  │  │
+│  │  │  └───────────────────────────────────────────────┘  │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  │                         │                                  │  │
+│  │              Elastic IP: x.x.x.x:8000                     │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    Amazon RDS                             │  │
+│  │                PostgreSQL 16 Instance                     │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Prerequisites
+- AWS EC2 instance (t2.micro or larger recommended)
+- Elastic IP address allocated and associated with the EC2 instance
+- Amazon RDS PostgreSQL instance (or external Postgres)
+- Security groups configured:
+  - EC2: Inbound port 22 (SSH), 8000 (API)
+  - RDS: Inbound port 5432 from EC2 security group
+
+### Step 1: EC2 Instance Setup
+
+```bash
+# SSH into your EC2 instance
+ssh -i your-key.pem ec2-user@<ELASTIC_IP>
+
+# Install Docker
+sudo yum update -y
+sudo yum install -y docker
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker ec2-user
+
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Log out and back in for group changes
+exit
+```
+
+### Step 2: Clone and Configure
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/kasparro-backend.git
+cd kasparro-backend
+
+# Create production environment file
+cat > .env.prod << EOF
+DATABASE_URL=postgresql+psycopg2://<RDS_USER>:<RDS_PASSWORD>@<RDS_ENDPOINT>:5432/<DB_NAME>
+COINPAPRIKA_API_KEY=your-api-key
+ETL_ENABLED=true
+ETL_INTERVAL_SECONDS=300
+LOG_LEVEL=info
+DOCS_ENABLED=true
+EOF
+```
+
+### Step 3: Deploy with Production Docker Compose
+
+```bash
+# Build and start the production container
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+# Verify the container is running
+docker ps
+
+# Check logs
+docker-compose -f docker-compose.prod.yml logs -f api
+
+# Health check
+curl http://localhost:8000/health
+```
+
+### Step 4: Access the Application
+
+Once deployed, the API is accessible at:
+- **API Base URL**: `http://kasparro-be.harry-dev.tech`
+- **Swagger Docs**: `http://kasparro-be.harry-dev.tech/docs` (if `DOCS_ENABLED=true`)
+- **ReDoc**: `http://kasparro-be.harry-dev.tech/redoc` (if `DOCS_ENABLED=true`)
+- **Health Check**: `http://kasparro-be.harry-dev.tech/health`
+
+> **Note**: Replace with your own domain or use `http://<ELASTIC_IP>:8000` if not using a custom domain.
+
+---
+
+## Docker Configuration
+
+### Multi-Stage Dockerfile
+
+The project uses a **multi-stage Dockerfile** for optimized production builds:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Stage 1: Builder                                           │
+│  ─────────────────                                          │
+│  • Base: python:3.11-slim                                   │
+│  • Installs build dependencies (build-essential, libpq-dev) │
+│  • Creates virtual environment                              │
+│  • Installs Python packages into venv                       │
+│  • Image size: ~500MB (discarded after build)               │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Stage 2: Runtime                                           │
+│  ────────────────                                           │
+│  • Base: python:3.11-slim                                   │
+│  • Only runtime dependencies (libpq5)                       │
+│  • Copies venv from builder (no build tools)                │
+│  • Non-root user (appuser) for security                     │
+│  • Final image size: ~180MB                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- **Smaller image size**: ~180MB vs ~500MB+ with single-stage
+- **Security**: No build tools in production, runs as non-root user
+- **Faster deployments**: Smaller images = faster pulls
+- **Layer caching**: Dependencies cached separately from code
+
+### Development vs Production Docker Compose
+
+| Feature | `docker-compose.yml` (Dev) | `docker-compose.prod.yml` (Prod) |
+|---------|---------------------------|----------------------------------|
+| **Database** | Local Postgres container | External RDS (DATABASE_URL required) |
+| **Environment** | `ENV=dev` | `ENV=prod` |
+| **Docs** | Enabled by default | Controlled via `DOCS_ENABLED` |
+| **Volumes** | Bind mounts for hot reload | No volumes (immutable) |
+| **Debug** | Enabled | Disabled |
+| **Resource Limits** | None | CPU/Memory limits set |
+| **Logging** | Default | JSON file with rotation |
+| **Network** | Custom bridge network | Default bridge |
+
+#### Development Docker Compose
+```bash
+# Start with local Postgres
+docker-compose up -d
+
+# Features:
+# - Local Postgres container included
+# - Hot reload via volume mounts
+# - Swagger docs at /docs
+# - Debug mode enabled
+```
+
+#### Production Docker Compose
+```bash
+# Requires DATABASE_URL pointing to RDS/external Postgres
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
+# Features:
+# - No database container (uses RDS)
+# - Immutable container (no volumes)
+# - Resource limits (512MB RAM, 1 CPU)
+# - Log rotation enabled
+# - Health checks configured
+```
+
+### Environment Variables (Production)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | ✅ Yes | - | PostgreSQL connection string |
+| `ENV` | No | `prod` | Environment mode |
+| `LOG_LEVEL` | No | `info` | Logging level |
+| `DOCS_ENABLED` | No | `true` | Enable Swagger/ReDoc |
+| `ETL_ENABLED` | No | `true` | Enable background ETL |
+| `ETL_INTERVAL_SECONDS` | No | `300` | ETL run interval |
+| `COINPAPRIKA_API_KEY` | No | - | API key for CoinPaprika |
+
+### Production Management Commands
+
+```bash
+# View running containers
+docker ps
+
+# View logs (follow mode)
+docker-compose -f docker-compose.prod.yml logs -f api
+
+# Restart the service
+docker-compose -f docker-compose.prod.yml restart api
+
+# Stop the service
+docker-compose -f docker-compose.prod.yml down
+
+# Rebuild and redeploy
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# View resource usage
+docker stats kasparro-backend
+
+# Execute commands inside container
+docker exec -it kasparro-backend /bin/bash
+```
+
+---
 
 Happy building! Contributions, new sources, and observability improvements are welcome.
