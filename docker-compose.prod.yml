@@ -12,12 +12,12 @@ services:
     environment:
       - ENV=prod
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DOCS_ENABLED=${DOCS_ENABLED:-false}
+      - DOCS_ENABLED=${DOCS_ENABLED:-true}
       # Amazon RDS connection - set these in .env.prod or environment
       - DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required for production}
       - COINPAPRIKA_API_KEY=${COINPAPRIKA_API_KEY:-}
       - ETL_ENABLED=${ETL_ENABLED:-true}
-      - ETL_INTERVAL_SECONDS=${ETL_INTERVAL_SECONDS:-300}
+      - ETL_INTERVAL_SECONDS=${ETL_INTERVAL_SECONDS:-50000}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://0.0.0.0:8000/health')"]
