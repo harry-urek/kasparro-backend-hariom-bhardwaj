@@ -8,24 +8,20 @@ from app.models.base import Base
 
 class NormalizedCryptoAsset(Base):
     """Unified cryptocurrency asset entity normalized across all sources.
-    
+
     The asset_uid is a canonical identifier that deterministically maps
     the same asset across CoinGecko, CoinPaprika, and CSV sources.
-    
+
     Cross-source matching is performed via:
     1. Source-specific ID lookup (coingecko_id, coinpaprika_id)
     2. Symbol + Name fuzzy matching
     3. Well-known asset mapping table
     """
+
     __tablename__ = "normalized_crypto_assets"
 
     # Canonical unified identifier (deterministic cross-source key)
-    asset_uid: Mapped[str] = mapped_column(
-        String(100),
-        primary_key=True,
-        index=True,
-        comment="Canonical unified asset identifier from cross-source matching"
-    )
+    asset_uid: Mapped[str] = mapped_column(String(100), primary_key=True, index=True, comment="Canonical unified asset identifier from cross-source matching")
 
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -37,21 +33,11 @@ class NormalizedCryptoAsset(Base):
 
     # Source tracking
     source: Mapped[str] = mapped_column(String(50), nullable=False)
-    
+
     # Source-specific identifiers for traceability
-    coingecko_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="Original CoinGecko identifier"
-    )
-    
-    coinpaprika_id: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-        index=True,
-        comment="Original CoinPaprika identifier"
-    )
+    coingecko_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, comment="Original CoinGecko identifier")
+
+    coinpaprika_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, comment="Original CoinPaprika identifier")
 
     source_updated_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),

@@ -33,19 +33,19 @@ CSV_OUTPUT_PATH = Path(__file__).parent.parent.parent / "data" / "crypto_market.
 
 class AssetUnificationService:
     """Unified service for cross-source asset management.
-    
+
     This service handles:
     1. Bootstrap: Discover and map assets from CoinGecko and CoinPaprika
     2. CSV Generation: Fetch from CoinCap API and create CSV every 20 mins
     3. Resolution: Resolve any asset to its canonical unified identifier
-    
+
     Usage:
         # Initialize at startup (performs bootstrap)
         service = await AssetUnificationService.create(db)
-        
+
         # Start background CSV updates
         service.start_csv_updater()
-        
+
         # Resolve assets during normalization
         asset_uid, cg_id, cp_id = service.resolve("coingecko", "BTC", "Bitcoin", payload)
     """
@@ -59,7 +59,7 @@ class AssetUnificationService:
     @classmethod
     async def create(cls, db: Session) -> "AssetUnificationService":
         """Factory method to create and initialize the service.
-        
+
         Performs the full bootstrap process:
         1. Fetches top 100 from CoinGecko and CoinPaprika
         2. Matches by symbol and validates by rank
@@ -78,13 +78,13 @@ class AssetUnificationService:
         log.info("=" * 60)
         log.info("ASSET UNIFICATION SERVICE - BOOTSTRAP")
         log.info("=" * 60)
-        
+
         start_time = datetime.now(timezone.utc)
 
         try:
             # Fetch data from both APIs in parallel
             log.info(f"Fetching top {TOP_ASSETS_COUNT} assets from CoinGecko and CoinPaprika...")
-            
+
             coingecko_data, coinpaprika_data = await asyncio.gather(
                 self._fetch_coingecko(),
                 self._fetch_coinpaprika(),
@@ -219,7 +219,7 @@ class AssetUnificationService:
         for symbol, cg_asset in cg_by_symbol.items():
             if symbol in cp_by_symbol:
                 cp_asset = cp_by_symbol[symbol]
-                
+
                 cg_rank = cg_asset.get("rank") or 999
                 cp_rank = cp_asset.get("rank") or 999
                 rank_diff = abs(cg_rank - cp_rank)
@@ -242,24 +242,28 @@ class AssetUnificationService:
         # Add unmatched CoinGecko assets
         for symbol in set(cg_by_symbol.keys()) - matched_symbols:
             cg_asset = cg_by_symbol[symbol]
-            matches.append({
-                "asset_uid": cg_asset["id"],
-                "coingecko_id": cg_asset["id"],
-                "coinpaprika_id": None,
-                "symbol": symbol,
-                "name": cg_asset.get("name") or symbol,
-            })
+            matches.append(
+                {
+                    "asset_uid": cg_asset["id"],
+                    "coingecko_id": cg_asset["id"],
+                    "coinpaprika_id": None,
+                    "symbol": symbol,
+                    "name": cg_asset.get("name") or symbol,
+                }
+            )
 
         # Add unmatched CoinPaprika assets
         for symbol in set(cp_by_symbol.keys()) - matched_symbols:
             cp_asset = cp_by_symbol[symbol]
-            matches.append({
-                "asset_uid": cp_asset["id"],
-                "coingecko_id": None,
-                "coinpaprika_id": cp_asset["id"],
-                "symbol": symbol,
-                "name": cp_asset.get("name") or symbol,
-            })
+            matches.append(
+                {
+                    "asset_uid": cp_asset["id"],
+                    "coingecko_id": None,
+                    "coinpaprika_id": cp_asset["id"],
+                    "symbol": symbol,
+                    "name": cp_asset.get("name") or symbol,
+                }
+            )
 
         # Log statistics
         full_matches = sum(1 for m in matches if m.get("coingecko_id") and m.get("coinpaprika_id"))
@@ -299,7 +303,7 @@ class AssetUnificationService:
                 "name": stmt.excluded.name,
             },
         )
-        
+
         self.db.execute(stmt)
         self.db.commit()
         return len(values)
@@ -363,17 +367,19 @@ class AssetUnificationService:
                     fieldnames=["symbol", "name", "price_usd", "market_cap_usd", "rank", "source_updated_at"],
                 )
                 writer.writeheader()
-                
+
                 timestamp = datetime.now(timezone.utc).isoformat()
                 for item in data:
-                    writer.writerow({
-                        "symbol": item.get("symbol", ""),
-                        "name": item.get("name", ""),
-                        "price_usd": item.get("priceUsd", ""),
-                        "market_cap_usd": item.get("marketCapUsd", ""),
-                        "rank": item.get("rank", ""),
-                        "source_updated_at": timestamp,
-                    })
+                    writer.writerow(
+                        {
+                            "symbol": item.get("symbol", ""),
+                            "name": item.get("name", ""),
+                            "price_usd": item.get("priceUsd", ""),
+                            "market_cap_usd": item.get("marketCapUsd", ""),
+                            "rank": item.get("rank", ""),
+                            "source_updated_at": timestamp,
+                        }
+                    )
 
             log.info(f"✓ Generated CSV with {len(data)} assets at {CSV_OUTPUT_PATH}")
 
@@ -403,16 +409,16 @@ class AssetUnificationService:
         payload: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, Optional[str], Optional[str]]:
         """Resolve an asset to its canonical unified identifier.
-        
+
         This method is called during ETL normalization to unify data
         from CoinGecko, CoinPaprika, and CSV into a single canonical entity.
-        
+
         Args:
             source: Source name ('coingecko', 'coinpaprika', 'csv')
             symbol: Trading symbol (e.g., 'BTC')
             name: Asset name (e.g., 'Bitcoin')
             payload: Raw payload for extracting source IDs
-            
+
         Returns:
             Tuple of (asset_uid, coingecko_id, coinpaprika_id)
         """
@@ -459,16 +465,12 @@ class AssetUnificationService:
     ) -> Optional[str]:
         """Look up asset_uid by source-specific identifier."""
         if coingecko_id:
-            mapping = self.db.query(AssetMapping).filter(
-                AssetMapping.coingecko_id == coingecko_id
-            ).first()
+            mapping = self.db.query(AssetMapping).filter(AssetMapping.coingecko_id == coingecko_id).first()
             if mapping:
                 return mapping.asset_uid
 
         if coinpaprika_id:
-            mapping = self.db.query(AssetMapping).filter(
-                AssetMapping.coinpaprika_id == coinpaprika_id
-            ).first()
+            mapping = self.db.query(AssetMapping).filter(AssetMapping.coinpaprika_id == coinpaprika_id).first()
             if mapping:
                 return mapping.asset_uid
 
@@ -479,9 +481,7 @@ class AssetUnificationService:
         normalized_symbol = symbol.upper().strip()
         normalized_name = self._normalize_name(name)
 
-        mappings = self.db.query(AssetMapping).filter(
-            AssetMapping.symbol == normalized_symbol
-        ).all()
+        mappings = self.db.query(AssetMapping).filter(AssetMapping.symbol == normalized_symbol).all()
 
         if not mappings:
             return None
@@ -571,7 +571,7 @@ _asset_service: Optional[AssetUnificationService] = None
 
 async def init_asset_service(db: Session) -> AssetUnificationService:
     """Initialize the global asset unification service.
-    
+
     Called at application startup to bootstrap mappings and start CSV updater.
     """
     global _asset_service

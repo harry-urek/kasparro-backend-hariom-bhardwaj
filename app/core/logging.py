@@ -53,12 +53,12 @@ def _slack_sink(message: Any) -> None:
 
 def configure_logging() -> None:
     global _logging_configured
-    
+
     # Prevent duplicate configuration
     if _logging_configured:
         return
     _logging_configured = True
-    
+
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
@@ -96,7 +96,7 @@ def configure_logging() -> None:
 
     # Intercept stdlib logging and disable propagation to avoid duplicates
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
-    
+
     # Disable uvicorn's default logging to prevent duplicates
     for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
         logging.getLogger(logger_name).handlers = [InterceptHandler()]

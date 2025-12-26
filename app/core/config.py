@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # ETL Configuration
     ETL_INTERVAL_SECONDS: int = 22 * 60  # 22 minutes - runs after CSV update (20 mins)
     ETL_ENABLED: bool = True  # Enable/disable automatic ETL
-    
+
     # CSV Generation from CoinCap API
     CSV_UPDATE_INTERVAL_SECONDS: int = 20 * 60  # 20 minutes
 

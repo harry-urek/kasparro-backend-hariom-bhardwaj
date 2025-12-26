@@ -32,24 +32,18 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
     )
-    
+
     # Create indexes for asset_mappings
     op.create_index('ix_asset_mappings_asset_uid', 'asset_mappings', ['asset_uid'])
     op.create_index('ix_asset_mappings_coingecko_id', 'asset_mappings', ['coingecko_id'])
     op.create_index('ix_asset_mappings_coinpaprika_id', 'asset_mappings', ['coinpaprika_id'])
     op.create_index('ix_asset_mappings_symbol', 'asset_mappings', ['symbol'])
     op.create_index('ix_asset_mapping_symbol_name', 'asset_mappings', ['symbol', 'name'])
-    
+
     # Add source-specific ID columns to normalized_crypto_assets
-    op.add_column(
-        'normalized_crypto_assets',
-        sa.Column('coingecko_id', sa.String(100), nullable=True, comment='Original CoinGecko identifier')
-    )
-    op.add_column(
-        'normalized_crypto_assets',
-        sa.Column('coinpaprika_id', sa.String(100), nullable=True, comment='Original CoinPaprika identifier')
-    )
-    
+    op.add_column('normalized_crypto_assets', sa.Column('coingecko_id', sa.String(100), nullable=True, comment='Original CoinGecko identifier'))
+    op.add_column('normalized_crypto_assets', sa.Column('coinpaprika_id', sa.String(100), nullable=True, comment='Original CoinPaprika identifier'))
+
     # Create indexes for the new columns
     op.create_index('ix_normalized_crypto_assets_coingecko_id', 'normalized_crypto_assets', ['coingecko_id'])
     op.create_index('ix_normalized_crypto_assets_coinpaprika_id', 'normalized_crypto_assets', ['coinpaprika_id'])
@@ -59,17 +53,17 @@ def downgrade() -> None:
     # Remove indexes from normalized_crypto_assets
     op.drop_index('ix_normalized_crypto_assets_coinpaprika_id', 'normalized_crypto_assets')
     op.drop_index('ix_normalized_crypto_assets_coingecko_id', 'normalized_crypto_assets')
-    
+
     # Remove source-specific ID columns from normalized_crypto_assets
     op.drop_column('normalized_crypto_assets', 'coinpaprika_id')
     op.drop_column('normalized_crypto_assets', 'coingecko_id')
-    
+
     # Drop asset_mappings table indexes
     op.drop_index('ix_asset_mapping_symbol_name', 'asset_mappings')
     op.drop_index('ix_asset_mappings_symbol', 'asset_mappings')
     op.drop_index('ix_asset_mappings_coinpaprika_id', 'asset_mappings')
     op.drop_index('ix_asset_mappings_coingecko_id', 'asset_mappings')
     op.drop_index('ix_asset_mappings_asset_uid', 'asset_mappings')
-    
+
     # Drop asset_mappings table
     op.drop_table('asset_mappings')

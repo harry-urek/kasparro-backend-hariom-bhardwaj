@@ -44,7 +44,7 @@ class ETLService:
     - Normalize data into unified schema with cross-source entity matching
     - Track ETL runs and checkpoints
     - Handle failures gracefully
-    
+
     Cross-Source Normalization:
     - Uses AssetUnificationService for deterministic entity unification
     - CoinGecko, CoinPaprika, and CSV data mapped to canonical asset_uid
@@ -205,17 +205,17 @@ class ETLService:
     # -------------------------------------------------------------------------
     def _normalize(self, records: List[Dict[str, Any]], source: SourceName) -> List[Dict[str, Any]]:
         """Normalize records into unified schema with deterministic cross-source matching.
-        
+
         Uses AssetResolver to unify CoinGecko, CoinPaprika, and CSV data into
         canonical entities. Each source's unique identifier is used for matching:
         - CoinGecko: payload['id'] (e.g., 'bitcoin')
         - CoinPaprika: payload['id'] (e.g., 'btc-bitcoin')
         - CSV: Symbol + Name matching
-        
+
         Args:
             records: Raw records from a source
             source: Source name for context
-            
+
         Returns:
             List of normalized records with canonical asset_uid
         """
@@ -296,7 +296,7 @@ class ETLService:
     # -------------------------------------------------------------------------
     def _upsert_normalized(self, rows: List[Dict[str, Any]]) -> None:
         """Upsert normalized records (idempotent write).
-        
+
         Uses on_conflict_do_update to handle cross-source data merging.
         Source-specific IDs are preserved using COALESCE to avoid overwriting
         existing IDs with NULL from sources that don't provide them.

@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     log.info("Shutting down services...")
-    
+
     # Stop ETL task
     if _etl_task:
         log.info("Cancelling scheduled ETL task...")
@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown asset service (stops CSV updater)
     shutdown_asset_service()
-    
+
     # Close the database session
     db.close()
 
